@@ -1,0 +1,27 @@
+{
+  "name": "gongbang-assistant-mockup",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.4",
+  "engines": {
+    "bun": ">=1.4.4 <1.5"
+  },
+  "scripts": {
+    "dev": "bun --port=4173 ./src/index.html",
+    "build": "bun build.ts",
+    "start": "bun serve.ts",
+    "typecheck": "bun check --no-script"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.4",
+    "lucide-preact": "^1.70.0",
+    "preact": "^11.2.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "bun": "1.4.4"
+  },
+  "trustedDependencies": [
+    "bun"
+  ]
+}
