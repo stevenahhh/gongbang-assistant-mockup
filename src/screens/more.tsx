@@ -2,7 +2,8 @@ import { CircleHelp, FileBarChart, Megaphone, Package, RotateCcw, Settings, Spar
 import { go, type ScreenDef } from "../router";
 import { role, scenario } from "../store";
 import type { Role } from "../types";
-import { Mascot, NavLink, Page, Segmented } from "../ui";
+import { Mascot, NavLink, Page, Segmented, Switch } from "../ui";
+import { showRaw } from "../chat";
 
 const items = [
   { to: "/opp", label: "기회", desc: "셀러 모집과 지원사업을 놓치지 않아요", Icon: Sparkles, roles: ["OWNER", "STAFF"] },
@@ -48,6 +49,7 @@ function Master() {
           <span class="field-label">화면 상태</span>
           <Segmented<ScenarioLabel> label="화면 상태" options={["평소", "빈 상태", "불러오기 오류"]} value={scenarioLabel} onChange={(v) => (scenario.value = scenarioLabels[v])} />
         </div>
+        <Switch label="LLM 출력 원본 보기" hint="오늘 탭의 비서 답 아래에 원본 JSON과 걸러낸 항목을 보여 줘요" on={showRaw.value} onChange={(v) => (showRaw.value = v)} />
         <button type="button" class="rowitem" onClick={() => go("/onboarding")}>
           <span class="glyph"><RotateCcw size={20} /></span>
           <span class="grow strong">시작하기 화면 다시 보기</span>

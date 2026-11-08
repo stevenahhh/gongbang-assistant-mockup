@@ -1,30 +1,11 @@
 import { useEffect, useRef } from "preact/hooks";
-import { Bell, CheckCheck, CreditCard, Inbox, Link2, RefreshCw, Send, Sparkles, Unplug } from "lucide-preact";
-import type { ComponentChildren } from "preact";
+import { Bell, RefreshCw } from "lucide-preact";
 import { go, type ScreenDef } from "../router";
-import {
-  bookings,
-  classes,
-  connections,
-  failedTasks,
-  lastSync,
-  notices,
-  openInquiries,
-  opportunities,
-  refresh,
-  refreshing,
-  role,
-  runningTasks,
-  scenario,
-  seatsTaken,
-  todaySlots,
-  unpaidBookings,
-  unreadNotices,
-  visibleTasks,
-  patch,
-} from "../store";
-import { BarRow, Btn, Empty, IconBtn, LoadError, Mascot, NavLink, Page, Skeleton, Status, openSheet } from "../ui";
-import { DAY, dDay, dateLabel, hhmm, relative } from "../lib/time";
+import { notices, patch, unreadNotices } from "../store";
+import { brief, send, showRaw, thread, type Msg } from "../chat";
+import { RenderReply } from "../harness/render";
+import { IconBtn, Mascot, Page, Status, openSheet } from "../ui";
+import { dateLabel, hhmm, relative } from "../lib/time";
 
 function usePullToRefresh(ref: { current: HTMLDivElement | null }, dot: { current: HTMLDivElement | null }) {
   useEffect(() => {
@@ -46,7 +27,7 @@ function usePullToRefresh(ref: { current: HTMLDivElement | null }, dot: { curren
       mark.style.transform = `translate3d(0, ${p}px, 0) rotate(${p * 4}deg)`;
     };
     const end = () => {
-      if (pulling && dy > 56) refresh();
+      if (pulling && dy > 56) void brief();
       pulling = false;
       mark.style.opacity = "0";
       mark.style.transform = "";
@@ -62,103 +43,6 @@ function usePullToRefresh(ref: { current: HTMLDivElement | null }, dot: { curren
       el.removeEventListener("touchcancel", end);
     };
   }, []);
-}
-
-function TodoCard({ to, icon, title, sub, tone }: { to: string; icon: ComponentChildren; title: string; sub?: string; tone?: "alert" }) {
-  return (
-    <NavLink to={to} class={`card tap row ${tone ?? ""}`} style={{ textDecoration: "none" }}>
-      <span class="glyph">{icon}</span>
-      <span class="grow">
-        <span class="strong num" style={{ display: "block" }}>{title}</span>
-        {sub ? <span class="sm muted clamp1">{sub}</span> : null}
-      </span>
-    </NavLink>
-  );
-}
-
-function Briefing() {
-  const slots = todaySlots();
-  const people = slots.reduce((sum, s) => sum + seatsTaken(s.id), 0);
-  return (
-    <div class="row" style={{ alignItems: "flex-start" }}>
-      <Mascot size={44} />
-      <p class="grow" style={{ fontSize: "1.0625rem", fontWeight: 600 }}>
-        오늘 수업 {slots.length}개, {people}명 와요. 문의 {openInquiries.value.filter((q) => q.status === "답장 초안 있음").length}건에 답장 초안을 만들어 두었어요.
-      </p>
-    </div>
-  );
-}
-
-function Running() {
-  const rows = runningTasks.value;
-  if (!rows.length) return null;
-  return (
-    <div class="stack">
-      {rows.map((t) => {
-        const p = t.progress ?? { done: 0, total: 1 };
-        return (
-          <div key={t.id} class="card stack">
-            <span class="strong num">{t.kind} {p.total}건 보내는 중 · {p.done}/{p.total}</span>
-            <div class="bar">
-              <i style={{ transform: `scaleX(${p.done / p.total})` }} />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Todos() {
-  const pending = visibleTasks.value;
-  const open = openInquiries.value;
-  const oldest = open.length ? Math.min(...open.map((q) => q.messages[0]!.at)) : 0;
-  const unpaid = unpaidBookings.value;
-  const failed = failedTasks.value;
-  const broken = connections.value.filter((c) => c.status === "오류");
-  const soon = opportunities.value.filter((o) => o.deadline > Date.now() && o.deadline - Date.now() < 7 * DAY && o.verdict !== "안 맞음");
-
-  if (scenario.value === "empty") return <Empty title="할 일을 다 끝냈어요">새로운 일이 생기면 여기에 모아 둘게요.</Empty>;
-
-  const cards = [
-    failed.length > 0 && <TodoCard key="fail" tone="alert" to="/approvals?tab=fail" icon={<Send size={22} />} title={`실패한 발송 ${failed.length}건`} sub={failed[0]!.failReason} />,
-    broken[0] && <TodoCard key="conn" tone="alert" to={`/settings/connections/${broken[0].id}`} icon={<Unplug size={22} />} title={`${broken[0].name} 연결 오류`} sub={broken[0].error} />,
-    pending.length > 0 && <TodoCard key="apr" to="/approvals" icon={<CheckCheck size={22} />} title={`승인 기다리는 일 ${pending.length}건`} sub={`가장 빠른 실행 ${relative(pending[0]!.runAt)}`} />,
-    open.length > 0 && <TodoCard key="inq" to="/inbox" icon={<Inbox size={22} />} title={`답하지 않은 문의 ${open.length}건`} sub={`가장 오래 기다린 손님 ${relative(oldest)}`} />,
-    unpaid.length > 0 && <TodoCard key="pay" to="/booking?status=unpaid" icon={<CreditCard size={22} />} title={`예약금 미입금 ${unpaid.length}건`} />,
-    role.value === "OWNER" && soon.length > 0 && <TodoCard key="opp" to={`/opp/${soon[0]!.id}`} icon={<Sparkles size={22} />} title={`마감 임박 기회 ${soon.length}건`} sub={`${soon[0]!.title} · ${dDay(soon[0]!.deadline)}`} />,
-  ];
-  return <div class="stack">{cards}</div>;
-}
-
-function TodayClasses() {
-  const slots = todaySlots();
-  if (scenario.value === "error") return <LoadError what="오늘 수업" onRetry={() => (scenario.value = "normal")} />;
-  if (!slots.length || scenario.value === "empty") {
-    return (
-      <Empty title="오늘은 수업이 없어요" action={<Btn small onClick={() => go("/booking")}>이번 주 예약 보기</Btn>} />
-    );
-  }
-  return (
-    <div class="list">
-      {slots.map((s) => {
-        const c = classes.value.find((x) => x.id === s.classId);
-        const past = s.start + (c?.mins ?? 60) * 60_000 < Date.now();
-        const unpaid = bookings.value.filter((b) => b.slotId === s.id && b.status === "예약금 대기").length;
-        return (
-          <NavLink key={s.id} class="rowitem" to={`/booking/slot/${s.id}`} style={{ opacity: past ? "0.55" : "1" }}>
-            <span class="num strong" style={{ width: "52px" }}>{hhmm(s.start)}</span>
-            <span class="grow">
-              <span class="strong clamp1">{c?.name}</span>
-              <span class="sm muted num">
-                {seatsTaken(s.id)}/{s.cap}명 · 리마인드 보냄{unpaid ? ` · 예약금 대기 ${unpaid}건` : ""}
-              </span>
-            </span>
-          </NavLink>
-        );
-      })}
-    </div>
-  );
 }
 
 function openNotices() {
@@ -186,17 +70,57 @@ function openNotices() {
   ));
 }
 
-function ConnectHint() {
-  const off = connections.value.some((c) => c.status === "해제됨" || c.status === "설정 중");
-  if (!off) return null;
-  return <TodoCard to="/settings/connections" icon={<Link2 size={22} />} title="연결하면 할 수 있는 일" sub="알림톡을 연결하면 리마인드를 보낼 수 있어요" />;
+function BotMsg({ m, last }: { m: Msg; last: boolean }) {
+  return (
+    <div class="bot-row">
+      <Mascot size={32} />
+      <div class="grow stack" style={{ "--gap": "var(--s3)" }}>
+        {m.pending ? (
+          <div class="typing" aria-label="비서가 답을 쓰는 중">
+            <i />
+            <i />
+            <i />
+          </div>
+        ) : m.reply ? (
+          <RenderReply reply={m.reply} />
+        ) : null}
+        {showRaw.value && m.raw ? (
+          <details class="raw">
+            <summary class="cap">LLM 출력 원본{m.issues?.length ? ` · 걸러낸 것 ${m.issues.length}건` : ""}</summary>
+            {m.issues?.length ? <ul class="cap raw-issues">{m.issues.map((x) => <li key={x}>{x}</li>)}</ul> : null}
+            <pre>{m.raw}</pre>
+          </details>
+        ) : null}
+        {last && m.reply?.suggest?.length ? (
+          <div class="chips suggest" aria-label="이어서 할 말">
+            {m.reply.suggest.map((s) => (
+              <button key={s} type="button" class="chip" onClick={() => void send(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 function Master() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dotRef = useRef<HTMLDivElement>(null);
   usePullToRefresh(scrollRef, dotRef);
-  const busy = refreshing.value;
+  const msgs = thread.value;
+  const lastBot = msgs.findLastIndex((m) => m.from === "bot");
+
+  useEffect(() => {
+    if (!thread.peek().length) void brief();
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && msgs.length > 1) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [msgs.length, msgs[msgs.length - 1]?.pending]);
+
   return (
     <div style={{ height: "100%", position: "relative" }}>
       <div class="ptr" ref={dotRef}>
@@ -207,8 +131,8 @@ function Master() {
         scrollRef={scrollRef}
         right={
           <>
-            <IconBtn label={busy ? "새로 고치는 중" : "새로 고침"} onClick={refresh}>
-              <RefreshCw size={20} class={busy ? "spin" : undefined} />
+            <IconBtn label="새 브리핑" onClick={() => void brief()}>
+              <RefreshCw size={20} />
             </IconBtn>
             <IconBtn label="알림" class={unreadNotices.value ? "badge-dot" : undefined} onClick={openNotices}>
               <Bell size={20} />
@@ -216,39 +140,20 @@ function Master() {
           </>
         }
       >
-        <p class="sm muted num" style={{ marginBottom: "var(--s4)" }}>
-          {dateLabel(Date.now())} · {hhmm(lastSync.value)} 기준
-        </p>
-        {busy ? (
-          <Skeleton height={76} count={4} />
-        ) : (
-          <div class="today-grid">
-            <div class="stack" style={{ "--gap": "var(--s4)" }}>
-              <Briefing />
-              <Running />
-              <Todos />
-              <ConnectHint />
-            </div>
-            <div>
-              <h2 class="section-head">오늘 수업</h2>
-              <TodayClasses />
-              {role.value !== "STAFF" ? <Week /> : null}
-            </div>
-          </div>
-        )}
+        <div class="wide thread">
+          <p class="sm muted num thread-date">{dateLabel(Date.now())}</p>
+          {msgs.map((m, i) =>
+            m.from === "me" ? (
+              <div key={m.id} class="me-row">
+                <div class="bubble mine">{m.text}</div>
+                <span class="cap muted num">{hhmm(m.at)}</span>
+              </div>
+            ) : (
+              <BotMsg key={m.id} m={m} last={i === lastBot} />
+            ),
+          )}
+        </div>
       </Page>
-    </div>
-  );
-}
-
-function Week() {
-  return (
-    <div class="section">
-      <h2 class="section-head">이번 주</h2>
-      <div class="card stack">
-        <BarRow label="확정 인원" value={32} max={48} tail="32명" tone="ok" />
-        <BarRow label="문의 답한 비율" value={18} max={23} tail="18/23건" />
-      </div>
     </div>
   );
 }

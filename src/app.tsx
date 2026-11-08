@@ -5,7 +5,7 @@ import { computed } from "./signals";
 import { go, onboardingOpen, phoneTabs, preload, route, screens, visited, type ScreenKey } from "./router";
 import { openInquiries, role, toasts, unreadNotices, visibleTasks } from "./store";
 import { Mascot, MicIcon, Skeleton, SheetHost } from "./ui";
-import { openAssistant } from "./assistant";
+import { askFrom, Composer } from "./chat";
 
 
 const meta: Record<ScreenKey, { label: string; Icon: typeof Sun }> = {
@@ -75,17 +75,21 @@ function Dock() {
   const sub = path.length > 0;
   return (
     <>
-      <button type="button" class="fab icon-btn solid" data-on={sub ? "" : undefined} aria-label="비서에게 말하기" onClick={() => openAssistant()}>
+      <button type="button" class="fab icon-btn solid" data-on={sub ? "" : undefined} aria-label="비서에게 말하기" onClick={() => askFrom({ screen: key, path })}>
         <Mascot size={30} />
       </button>
       <div class="dock" data-sub={sub ? "" : undefined} data-split={def?.split ? "" : undefined}>
-      <button type="button" class="ask-bar press" onClick={() => openAssistant()} aria-label="비서에게 말하기">
-        <Mascot size={32} />
-        <span class="label clamp1">비서에게 말하기</span>
-        <span class="mic">
-          <MicIcon />
-        </span>
-      </button>
+      {key === "today" ? (
+        <Composer />
+      ) : (
+        <button type="button" class="ask-bar press" onClick={() => askFrom({ screen: key, path })} aria-label="비서에게 말하기">
+          <Mascot size={32} />
+          <span class="label clamp1">비서에게 말하기</span>
+          <span class="mic">
+            <MicIcon />
+          </span>
+        </button>
+      )}
       <nav class="tabbar" aria-label="하단 메뉴" data-phone-tabs>
         {tabKeys.value.map((k) => (
           <NavButton key={k} k={k} current={k === key || (k === "more" && moreKeys.has(key))} />
@@ -149,6 +153,14 @@ function OnboardingGate() {
 export function App() {
   useEffect(() => {
     void preload(route.value.key);
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        askFrom({ screen: route.value.key, path: route.value.path });
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
   }, []);
 
   if (onboardingOpen.value) {
